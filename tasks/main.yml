@@ -1,0 +1,38 @@
+---
+- name: Check namespace
+  shell: >
+   kubectl get namespace {{ keepalived_ns }}
+  register: namespace_ok
+  failed_when: namespace_ok.rc != 1 and namespace_ok.rc != 0
+  tags:
+    - keepalived
+  when: 
+    - "'master' in group_names"
+
+- name: Install keepalived required package
+  become: yes
+  apt: 
+    name: 
+      - ipvsadm
+      - curl 
+    state: present
+    update_cache: yes
+  tags:
+    - keepalived
+
+
+- name: Install Keepalived to Kubeadm cluster
+  shell: >
+     curl https://raw.githubusercontent.com/goacid/k8s_keepalived/main/kubealived.yaml | \
+     sed -e "s/_RID_/$((1 + RANDOM % 255))/" 
+     -e "s/_INT_/{{ keepalived_interface }}/"
+     -e "s/_VIP_/{{ keepalived_vip}}/"
+     -e "s/_NS_/{{ keepalived_ns }}/"
+     -e "s~_PASS_~$(openssl rand -base64 8)~" |
+     kubectl create -f-
+  tags:
+    - keepalived
+  ignore_errors: no
+  when: 
+    - "'master' in group_names"
+    - namespace_ok.rc == 1
